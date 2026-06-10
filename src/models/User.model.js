@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   fcmToken:     { type: String, default: null },
   avatar:       { type: String, default: null },
+  bio:          { type: String, default: '' },
   isOnline:     { type: Boolean, default: false },
 }, { timestamps: true })
 

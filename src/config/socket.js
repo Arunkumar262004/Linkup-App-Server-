@@ -21,14 +21,74 @@ const initSocket = (httpServer) => {
     }
   })
 
-  io.on('connection', async (socket) => {
+const userSockets = new Map() // userId string -> Set of socket.ids
+
+io.on('connection', async (socket) => {
+    // Add to userSockets map
+    const userIdStr = socket.userId.toString()
+    if (!userSockets.has(userIdStr)) {
+      userSockets.set(userIdStr, new Set())
+    }
+    userSockets.get(userIdStr).add(socket.id)
+
     await userSvc.updateOnlineStatus(socket.userId, true)
+
+    // Mark pending messages sent to this user as 'delivered'
+    try {
+      const Chat = require('../models/Chat.model')
+      const Message = require('../models/Message.model')
+
+      const chats = await Chat.find({ members: socket.userId })
+      const chatIds = chats.map(c => c._id)
+
+      await Message.updateMany(
+        { chatId: { $in: chatIds }, senderId: { $ne: socket.userId }, status: 'sent' },
+        { $set: { status: 'delivered' } }
+      )
+
+      chatIds.forEach(chatId => {
+        socket.to(chatId.toString()).emit('messages_delivered', { chatId: chatId.toString() })
+      })
+    } catch (err) {
+      console.error('Delivering pending messages error:', err)
+    }
 
     socket.on('join_room', (chatId) => socket.join(chatId))
 
-    socket.on('send_message', (data) => {
-      // Broadcast to everyone in the room except the sender
-      socket.to(data.chatId).emit('receive_message', data)
+    socket.on('send_message', async (data) => {
+      try {
+        const Chat = require('../models/Chat.model')
+        const chat = await Chat.findById(data.chatId)
+        if (chat) {
+          chat.members.forEach(memberId => {
+            const memberIdStr = memberId.toString()
+            const socketIds = userSockets.get(memberIdStr)
+            if (socketIds) {
+              socketIds.forEach(sid => {
+                if (sid !== socket.id) {
+                  io.to(sid).emit('receive_message', data)
+                }
+              })
+            }
+          })
+        }
+      } catch (err) {
+        console.error('Error broadcasting message:', err)
+      }
+    })
+
+    socket.on('read_chat', async ({ chatId }) => {
+      try {
+        const Message = require('../models/Message.model')
+        await Message.updateMany(
+          { chatId, senderId: { $ne: socket.userId }, status: { $ne: 'read' } },
+          { $set: { status: 'read' } }
+        )
+        // Broadcast that messages have been read
+        socket.to(chatId).emit('messages_read', { chatId })
+      } catch (err) {
+        console.error('Reading chat error:', err)
+      }
     })
 
     socket.on('typing', ({ chatId }) => {
@@ -40,7 +100,14 @@ const initSocket = (httpServer) => {
     })
 
     socket.on('disconnect', async () => {
-      await userSvc.updateOnlineStatus(socket.userId, false)
+      const sockets = userSockets.get(userIdStr)
+      if (sockets) {
+        sockets.delete(socket.id)
+        if (sockets.size === 0) {
+          userSockets.delete(userIdStr)
+          await userSvc.updateOnlineStatus(socket.userId, false)
+        }
+      }
     })
   })
 

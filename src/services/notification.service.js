@@ -7,14 +7,14 @@ const sendPush = async ({ userId, fcmToken, title, body, reminderId }) => {
   const message = {
     token: fcmToken,
     notification: { title, body },
-    data: { reminderId: reminderId.toString() },
+    data: reminderId ? { reminderId: reminderId.toString() } : {},
   }
 
   try {
     await admin.messaging().send(message)
-    await NotifLog.create({ userId, reminderId, channel: 'push', status: 'sent' })
+    await NotifLog.create({ userId, ...(reminderId ? { reminderId } : {}), channel: 'push', status: 'sent' })
   } catch (err) {
-    await NotifLog.create({ userId, reminderId, channel: 'push', status: 'failed' })
+    await NotifLog.create({ userId, ...(reminderId ? { reminderId } : {}), channel: 'push', status: 'failed' })
     console.error('FCM error:', err.message)
   }
 }

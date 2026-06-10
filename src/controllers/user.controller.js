@@ -21,4 +21,25 @@ const updateFCMToken = async (req, res) => {
 
 const getMe = (req, res) => res.json(req.user)
 
-module.exports = { search, updateFCMToken, getMe }
+const updateProfile = async (req, res) => {
+  try {
+    const { name, bio } = req.body
+    const user = await userSvc.updateProfile(req.user._id, { name, bio })
+    res.json(user)
+  } catch (e) {
+    res.status(400).json({ message: e.message })
+  }
+}
+
+const updateAvatar = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' })
+    const avatarUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`
+    const user = await userSvc.updateAvatar(req.user._id, avatarUrl)
+    res.json({ avatar: avatarUrl, user })
+  } catch (e) {
+    res.status(400).json({ message: e.message })
+  }
+}
+
+module.exports = { search, updateFCMToken, getMe, updateProfile, updateAvatar }

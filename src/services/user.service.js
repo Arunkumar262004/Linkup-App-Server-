@@ -16,4 +16,10 @@ const updateFCMToken = (userId, fcmToken) =>
 const updateOnlineStatus = (userId, isOnline) =>
   User.findByIdAndUpdate(userId, { isOnline })
 
-module.exports = { searchUser, updateFCMToken, updateOnlineStatus }
+const updateProfile = (userId, { name, bio }) =>
+  User.findByIdAndUpdate(userId, { name, bio }, { new: true }).select('-passwordHash')
+
+const updateAvatar = (userId, avatar) =>
+  User.findByIdAndUpdate(userId, { avatar }, { new: true }).select('-passwordHash')
+
+module.exports = { searchUser, updateFCMToken, updateOnlineStatus, updateProfile, updateAvatar }
